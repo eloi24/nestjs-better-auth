@@ -15,7 +15,7 @@ type BodyParserHandler = (
 	next: MiddlewareNext,
 ) => void;
 
-type ExpressBodyParserModule = {
+type BodyParserModule = {
 	json(options?: unknown): BodyParserHandler;
 	urlencoded(options?: unknown): BodyParserHandler;
 };
@@ -27,6 +27,13 @@ export interface SkipBodyParsingMiddlewareOptions {
 	 */
 	basePath?: string;
 	bodyParser?: ResolvedBodyParserOptions;
+	/**
+	 * The `getType()` of the Nest HTTP adapter. It selects which package
+	 * provides the JSON and URL-encoded parsers: `@nestjs/platform-node` for
+	 * `"node"` (so `express` does not have to be installed), `express` otherwise.
+	 * @default "express"
+	 */
+	adapterType?: string;
 }
 
 /**
@@ -56,8 +63,16 @@ type ResponseLike = ServerResponse<IncomingMessage> & {
 	raw?: ServerResponse<IncomingMessage>;
 };
 
-function getExpressBodyParser(): ExpressBodyParserModule {
-	return require("express") as ExpressBodyParserModule;
+/**
+ * Loads the body parsers of the active adapter. `@nestjs/platform-node` ships
+ * its own `json()`/`urlencoded()`, which take the same options as `body-parser`.
+ */
+function getBodyParserModule(adapterType: string): BodyParserModule {
+	if (adapterType === "node") {
+		return require("@nestjs/platform-node/body-parser/body-parser") as BodyParserModule;
+	}
+
+	return require("express") as BodyParserModule;
 }
 
 export type ResolvedJsonBodyParserOptions = JsonBodyParserOptions & {
@@ -136,9 +151,12 @@ export function matchesBasePath(req: RequestLike, basePath: string) {
 export function SkipBodyParsingMiddleware(
 	options: SkipBodyParsingMiddlewareOptions = {},
 ) {
-	const { basePath = "/api/auth", bodyParser = resolveBodyParserOptions() } =
-		options;
-	const express = getExpressBodyParser();
+	const {
+		basePath = "/api/auth",
+		bodyParser = resolveBodyParserOptions(),
+		adapterType = "express",
+	} = options;
+	const parsers = getBodyParserModule(adapterType);
 
 	const {
 		enabled: jsonEnabled,
@@ -148,14 +166,14 @@ export function SkipBodyParsingMiddleware(
 	const { enabled: urlencodedEnabled, ...urlencodedParserOptions } =
 		bodyParser.urlencoded;
 
-	const expressJsonParserOptions = rawBody
+	const jsonParserOptionsWithRawBody = rawBody
 		? { ...jsonParserOptions, verify: rawBodyParser }
 		: jsonParserOptions;
 	const jsonParser = jsonEnabled
-		? express.json(expressJsonParserOptions as never)
+		? parsers.json(jsonParserOptionsWithRawBody as never)
 		: null;
 	const urlencodedParser = urlencodedEnabled
-		? express.urlencoded(urlencodedParserOptions as never)
+		? parsers.urlencoded(urlencodedParserOptions as never)
 		: null;
 
 	return (req: RequestLike, res: ResponseLike, next: MiddlewareNext): void => {

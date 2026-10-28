@@ -222,6 +222,7 @@ export class AuthModule
 					SkipBodyParsingMiddleware({
 						basePath: this.basePath,
 						bodyParser: bodyParserOptions,
+						adapterType,
 					}),
 				)
 				.forRoutes("*path");
