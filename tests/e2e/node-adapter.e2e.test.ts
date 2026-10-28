@@ -5,7 +5,6 @@ import { Test } from "@nestjs/testing";
 import { betterAuth } from "better-auth";
 import Module from "node:module";
 import request from "supertest";
-import { AuthModule } from "../../src/index.ts";
 import { TestController } from "../shared/test-controller.ts";
 
 type ModuleLoad = (request: string, ...rest: unknown[]) => unknown;
@@ -32,6 +31,10 @@ describe.skipIf(process.env.TEST_HTTP_ADAPTER !== "node")(
 
 				return originalLoad.call(this, id, ...rest);
 			};
+
+			// Loaded only now, so that anything the library requires while it
+			// evaluates is seen by the hook above.
+			const { AuthModule } = await import("../../src/index.ts");
 
 			const auth = betterAuth({
 				basePath: "/api/auth",
